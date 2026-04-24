@@ -28,11 +28,11 @@ SPECIFIC_CONFIG_COUNT = 2500
 # Set each protocol to True to enable, False to disable.
 ENABLED_PROTOCOLS = {
     "wireguard://": False,
-    "hysteria2://": False,
+    "hysteria2://": True,
     "vless://": True,
-    "vmess://": False,
-    "ss://": False,
-    "trojan://": False,
+    "vmess://": True,
+    "ss://": True,
+    "trojan://": True,
     "tuic://": False,
 }
 
