@@ -24,7 +24,7 @@ class ConfigToXray:
             "log": {
                 "loglevel": "warning"
             },
-            "remarks": "🌐 YawStar Proxy Hunter Balanced",
+            "remarks": "👽 Anonymous Multi Balanced",
             "dns": {
                 "servers": [
                     "https://dns.google/dns-query",
