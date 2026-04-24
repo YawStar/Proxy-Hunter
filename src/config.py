@@ -1,355 +1,285 @@
-import json
-import base64
+from typing import Dict, List, Optional
+from datetime import datetime
 import re
+from urllib.parse import urlparse
+from dataclasses import dataclass
 import logging
-from typing import Dict, Optional
-from urllib.parse import urlparse, parse_qs, unquote
-import binascii
-from functools import lru_cache
+from math import inf
 
+from user_settings import (
+    SOURCE_URLS, USE_MAXIMUM_POWER, SPECIFIC_CONFIG_COUNT, ENABLED_PROTOCOLS,
+    MAX_CONFIG_AGE_DAYS, ENABLE_SINGBOX_TESTER, SINGBOX_TESTER_MAX_WORKERS,
+    SINGBOX_TESTER_TIMEOUT_SECONDS, SINGBOX_TESTER_URLS, ENABLE_XRAY_TESTER,
+    XRAY_TESTER_MAX_WORKERS, XRAY_TESTER_TIMEOUT_SECONDS, XRAY_TESTER_URLS,
+    LOCATION_APIS
+)
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-VALID_SS_METHODS = {
-    'aes-128-gcm', 'aes-192-gcm', 'aes-256-gcm',
-    'chacha20-ietf-poly1305', 'xchacha20-ietf-poly1305',
-    '2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm',
-    'aes-128-cfb', 'aes-192-cfb', 'aes-256-cfb',
-    'aes-128-ctr', 'aes-192-ctr', 'aes-256-ctr',
-    'chacha20', 'chacha20-ietf', 'rc4-md5'
-}
+@dataclass
+class ChannelMetrics:
+    total_configs: int = 0
+    valid_configs: int = 0
+    unique_configs: int = 0
+    avg_response_time: float = 0
+    last_success_time: Optional[datetime] = None
+    fail_count: int = 0
+    success_count: int = 0
+    overall_score: float = 0.0
+    protocol_counts: Dict[str, int] = None
 
-VALID_VLESS_FLOWS = {'', 'xtls-rprx-origin', 'xtls-rprx-direct', 'xtls-rprx-vision'}
-VALID_VLESS_SECURITY = {'none', 'tls', 'reality', 'xtls'}
-VALID_TRANSPORT_TYPES = {'tcp', 'kcp', 'ws', 'http', 'h2', 'quic', 'grpc', 'httpupgrade', 'splithttp', 'xhttp', 'raw'}
+    
+    def __post_init__(self):
+        if self.protocol_counts is None:
+            self.protocol_counts = {}
 
-def is_base64(s: str) -> bool:
-    if not s or len(s) < 4:
-        return False
-    try:
-        s = s.rstrip('=')
-        return bool(re.match(r'^[A-Za-z0-9+/\-_]+$', s)) and len(s) % 4 in (0, 2, 3)
-    except Exception:
-        return False
-
-@lru_cache(maxsize=2048)
-def safe_b64decode(s: str) -> Optional[str]:
-    if not s:
-        return None
-    try:
-        s = s.replace('-', '+').replace('_', '/')
-        padding = '=' * (-len(s) % 4)
-        decoded = base64.b64decode(s + padding, validate=True)
-        return decoded.decode('utf-8', errors='strict')
-    except (binascii.Error, UnicodeDecodeError, ValueError):
-        pass
-    
-    try:
-        s_original = s.replace('-', '+').replace('_', '/')
-        decoded = base64.b64decode(s_original)
-        return decoded.decode('utf-8', errors='ignore')
-    except Exception:
-        return None
-
-def decode_vmess(config: str) -> Optional[Dict]:
-    if not config or not isinstance(config, str) or not config.startswith('vmess://'):
-        return None
-    
-    encoded = config[8:].strip()
-    if not encoded:
-        return None
-    
-    decoded = safe_b64decode(encoded)
-    if not decoded:
-        return None
-    
-    try:
-        data = json.loads(decoded)
-    except json.JSONDecodeError:
-        return None
-    
-    if not isinstance(data, dict):
-        return None
-    
-    required_fields = ['add', 'port', 'id']
-    if not all(field in data and data[field] for field in required_fields):
-        return None
-    
-    try:
-        data['port'] = int(data['port'])
-    except (ValueError, TypeError):
-        return None
-    
-    data['name'] = data.get('ps', data.get('name', ''))
-    data['net'] = data.get('net', 'tcp').lower()
-    data['tls'] = data.get('tls', 'none').lower()
-    
-    if data['net'] not in VALID_TRANSPORT_TYPES:
-        data['net'] = 'tcp'
-    
-    return data
-
-def parse_vless(config: str) -> Optional[Dict]:
-    if not config or not isinstance(config, str) or not config.startswith('vless://'):
-        return None
-    
-    try:
-        url = urlparse(config)
-    except Exception:
-        return None
-    
-    if not url.hostname or not url.username:
-        return None
-    
-    port = url.port or 443
-    
-    params = parse_qs(url.query)
-    security = params.get('security', ['none'])[0].lower()
-    if security not in VALID_VLESS_SECURITY:
-        security = 'none'
-    
-    flow = params.get('flow', [''])[0].lower()
-    if flow and flow not in VALID_VLESS_FLOWS:
-        flow = ''
-    
-    transport_type = params.get('type', ['tcp'])[0].lower()
-    if transport_type not in VALID_TRANSPORT_TYPES:
-        transport_type = 'tcp'
-    
-    return {
-        'uuid': url.username,
-        'address': url.hostname,
-        'port': port,
-        'flow': flow,
-        'sni': params.get('sni', [url.hostname])[0],
-        'type': transport_type,
-        'path': params.get('path', [''])[0],
-        'host': params.get('host', [url.hostname])[0],
-        'security': security,
-        'alpn': params.get('alpn', [''])[0],
-        'fp': params.get('fp', [''])[0],
-        'pbk': params.get('pbk', [''])[0],
-        'sid': params.get('sid', [''])[0],
-        'spx': params.get('spx', [''])[0],
-        'name': unquote(url.fragment) if url.fragment else ''
-    }
-
-def parse_trojan(config: str) -> Optional[Dict]:
-    if not config or not isinstance(config, str) or not config.startswith('trojan://'):
-        return None
-    
-    try:
-        url = urlparse(config)
-    except Exception:
-        return None
-    
-    if not url.hostname or not url.username:
-        return None
-    
-    port = url.port or 443
-    
-    params = parse_qs(url.query)
-    transport_type = params.get('type', ['tcp'])[0].lower()
-    if transport_type not in VALID_TRANSPORT_TYPES:
-        transport_type = 'tcp'
-    
-    return {
-        'password': url.username,
-        'address': url.hostname,
-        'port': port,
-        'sni': params.get('sni', [url.hostname])[0],
-        'alpn': params.get('alpn', [''])[0],
-        'type': transport_type,
-        'path': params.get('path', [''])[0],
-        'host': params.get('host', [url.hostname])[0],
-        'security': params.get('security', ['tls'])[0],
-        'fp': params.get('fp', [''])[0],
-        'flow': params.get('flow', [''])[0],
-        'name': unquote(url.fragment) if url.fragment else ''
-    }
-
-def parse_hysteria2(config: str) -> Optional[Dict]:
-    if not config or not isinstance(config, str) or not config.startswith(('hysteria2://', 'hy2://')):
-        return None
-    
-    try:
-        url = urlparse(config)
-    except Exception:
-        return None
-    
-    if not url.hostname:
-        return None
-    
-    port = url.port or 443
-    
-    params = parse_qs(url.query)
-    password = url.username or params.get('password', [''])[0]
-    if not password:
-        return None
-    
-    return {
-        'address': url.hostname,
-        'port': port,
-        'password': password,
-        'sni': params.get('sni', [url.hostname])[0],
-        'obfs': params.get('obfs', [''])[0],
-        'obfs-password': params.get('obfs-password', [''])[0],
-        'insecure': params.get('insecure', ['0'])[0],
-        'pinSHA256': params.get('pinSHA256', [''])[0],
-        'name': unquote(url.fragment) if url.fragment else ''
-    }
-
-def parse_shadowsocks(config: str) -> Optional[Dict]:
-    if not config or not isinstance(config, str) or not config.startswith('ss://'):
-        return None
-    
-    try:
-        fragment_index = config.find('#')
-        if fragment_index != -1:
-            url_part = config[:fragment_index]
-            fragment = config[fragment_index+1:]
-        else:
-            url_part = config
-            fragment = ''
+class ChannelConfig:
+    def __init__(self, url: str):
+        self.url = self._validate_url(url)
+        self.enabled = True
+        self.metrics = ChannelMetrics()
+        self.is_telegram = bool(re.match(r'^https://t\.me/s/', self.url))
+        self.error_count = 0
+        self.last_check_time = None
         
-        url_part = url_part[5:]
+    def _validate_url(self, url: str) -> str:
+        if not url or not isinstance(url, str):
+            raise ValueError("Invalid URL")
+        url = url.strip()
+        if not url.startswith(('http://', 'https://', 'ssconf://')):
+            raise ValueError("Invalid URL protocol")
+        return url
         
-        if '@' in url_part:
-            credential_part, server_part = url_part.split('@', 1)
+    
+    def calculate_overall_score(self):
+        try:
+            total_attempts = max(1, self.metrics.success_count + self.metrics.fail_count)
+            reliability_score = (self.metrics.success_count / total_attempts) * 35
             
-            if ':' not in server_part:
-                return None
+            total_configs = max(1, self.metrics.total_configs)
+            quality_score = (self.metrics.valid_configs / total_configs) * 25
             
-            host, port_str = server_part.rsplit(':', 1)
-            host = host.strip('[]')
+            valid_configs = max(1, self.metrics.valid_configs)
+            uniqueness_score = (self.metrics.unique_configs / valid_configs) * 25
             
-            try:
-                port = int(port_str)
-            except ValueError:
-                return None
+            response_score = 15
+            if self.metrics.avg_response_time > 0:
+                response_score = max(0, min(15, 15 * (1 - (self.metrics.avg_response_time / 10))))
             
-            credential_decoded = unquote(credential_part)
-            
-            if is_base64(credential_decoded):
-                method_pass = safe_b64decode(credential_decoded)
-                if not method_pass or ':' not in method_pass:
-                    return None
-                method, password = method_pass.split(':', 1)
-            else:
-                if ':' not in credential_decoded:
-                    return None
-                method, password = credential_decoded.split(':', 1)
-        else:
-            full_decoded = safe_b64decode(url_part)
-            if not full_decoded:
-                return None
-            
-            if '@' not in full_decoded:
-                return None
-            
-            credential_part, server_part = full_decoded.split('@', 1)
-            
-            if ':' not in server_part:
-                return None
-            
-            host, port_str = server_part.rsplit(':', 1)
-            host = host.strip('[]')
-            
-            try:
-                port = int(port_str)
-            except ValueError:
-                return None
-            
-            if ':' not in credential_part:
-                return None
-            
-            method, password = credential_part.split(':', 1)
+            self.metrics.overall_score = round(reliability_score + quality_score + uniqueness_score + response_score, 2)
+        except Exception as e:
+            logger.error(f"Error calculating score for {self.url}: {str(e)}")
+            self.metrics.overall_score = 0.0
+
+class ProxyConfig:
+    def __init__(self):
+        self.use_maximum_power = USE_MAXIMUM_POWER
+        self.specific_config_count = SPECIFIC_CONFIG_COUNT
+        self.MAX_CONFIG_AGE_DAYS = MAX_CONFIG_AGE_DAYS
         
-        if not method or not password:
-            return None
+        self.ENABLE_CONFIG_TESTER = ENABLE_SINGBOX_TESTER
+        self.TESTER_MAX_WORKERS = SINGBOX_TESTER_MAX_WORKERS
+        self.TESTER_TIMEOUT_SECONDS = SINGBOX_TESTER_TIMEOUT_SECONDS
+        self.TESTER_URLS = SINGBOX_TESTER_URLS
         
-        method = method.lower().strip()
-        if method not in VALID_SS_METHODS:
-            return None
+        self.ENABLE_XRAY_TESTER = ENABLE_XRAY_TESTER
+        self.XRAY_TESTER_MAX_WORKERS = XRAY_TESTER_MAX_WORKERS
+        self.XRAY_TESTER_TIMEOUT_SECONDS = XRAY_TESTER_TIMEOUT_SECONDS
+        self.XRAY_TESTER_URLS = XRAY_TESTER_URLS
         
+        self.LOCATION_APIS = LOCATION_APIS
+
+        initial_urls = [ChannelConfig(url=url) for url in SOURCE_URLS]
+        self.SOURCE_URLS = self._remove_duplicate_urls(initial_urls)
+        self.SUPPORTED_PROTOCOLS = self._initialize_protocols()
+        self._initialize_settings()
+        self._set_smart_limits()
+
+    def _initialize_protocols(self) -> Dict:
         return {
-            'method': method,
-            'password': password,
-            'address': host,
-            'port': port,
-            'plugin': '',
-            'name': unquote(fragment) if fragment else ''
+            "wireguard://": {"priority": 1, "aliases": [], "enabled": ENABLED_PROTOCOLS.get("wireguard://", False)},
+            "hysteria2://": {"priority": 2, "aliases": ["hy2://"], "enabled": ENABLED_PROTOCOLS.get("hysteria2://", False)},
+            "vless://": {"priority": 2, "aliases": [], "enabled": ENABLED_PROTOCOLS.get("vless://", False)},
+            "vmess://": {"priority": 1, "aliases": [], "enabled": ENABLED_PROTOCOLS.get("vmess://", False)},
+            "ss://": {"priority": 2, "aliases": [], "enabled": ENABLED_PROTOCOLS.get("ss://", False)},
+            "trojan://": {"priority": 2, "aliases": [], "enabled": ENABLED_PROTOCOLS.get("trojan://", False)},
+            "tuic://": {"priority": 1, "aliases": [], "enabled": ENABLED_PROTOCOLS.get("tuic://", False)}
         }
-    
-    except Exception as e:
-        logger.debug(f"Shadowsocks parse error: {e}")
-        return None
 
-def parse_wireguard(config: str) -> Optional[Dict]:
-    if not config or not isinstance(config, str) or not config.startswith('wireguard://'):
-        return None
-    
-    try:
-        url = urlparse(config)
-    except Exception:
-        return None
-    
-    if not url.hostname:
-        return None
-    
-    port = url.port or 51820
-    
-    params = parse_qs(url.query)
-    private_key = url.username or params.get('privatekey', [''])[0]
-    if not private_key:
-        return None
-    
-    return {
-        'address': url.hostname,
-        'port': port,
-        'private_key': private_key,
-        'public_key': params.get('publickey', [''])[0],
-        'preshared_key': params.get('presharedkey', [''])[0],
-        'reserved': params.get('reserved', [''])[0],
-        'mtu': params.get('mtu', ['1420'])[0],
-        'local_address': params.get('address', [''])[0],
-        'peers': params.get('peer', []),
-        'name': unquote(url.fragment) if url.fragment else ''
-    }
+    def _initialize_settings(self):
+        self.CHANNEL_RETRY_LIMIT = min(10, max(1, 5))
+        self.CHANNEL_ERROR_THRESHOLD = min(0.9, max(0.1, 0.7))
+        self.OUTPUT_FILE = 'configs/proxy_configs.txt'
+        self.STATS_FILE = 'configs/channel_stats.json'
+        self.MAX_RETRIES = min(10, max(1, 5))
+        self.RETRY_DELAY = min(60, max(5, 15))
+        self.REQUEST_TIMEOUT = min(120, max(10, 60))
+        
+        self.HEADERS = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
 
-def parse_tuic(config: str) -> Optional[Dict]:
-    if not config or not isinstance(config, str) or not config.startswith('tuic://'):
-        return None
-    
-    try:
-        url = urlparse(config)
-    except Exception:
-        return None
-    
-    if not url.hostname:
-        return None
-    
-    port = url.port or 443
-    
-    if not url.username or ':' not in url.username:
-        return None
-    
-    try:
-        uuid, password = url.username.split(':', 1)
-    except ValueError:
-        return None
-    
-    params = parse_qs(url.query)
-    
-    return {
-        'address': url.hostname,
-        'port': port,
-        'uuid': uuid,
-        'password': password,
-        'congestion_control': params.get('congestion_control', ['bbr'])[0],
-        'udp_relay_mode': params.get('udp_relay_mode', ['native'])[0],
-        'alpn': params.get('alpn', ['h3'])[0],
-        'sni': params.get('sni', [url.hostname])[0],
-        'allow_insecure': params.get('allow_insecure', ['0'])[0],
-        'disable_sni': params.get('disable_sni', ['0'])[0],
-        'name': unquote(url.fragment) if url.fragment else ''
-    }
+    def _set_smart_limits(self):
+        if self.use_maximum_power:
+            self._set_maximum_power_mode()
+        else:
+            self._set_specific_count_mode()
+
+    def _set_maximum_power_mode(self):
+        max_configs = 10000
+        
+        for protocol in self.SUPPORTED_PROTOCOLS:
+            self.SUPPORTED_PROTOCOLS[protocol].update({
+                "min_configs": 1,
+                "max_configs": max_configs,
+                "flexible_max": True
+            })
+        
+        self.MIN_CONFIGS_PER_CHANNEL = 1
+        self.MAX_CONFIGS_PER_CHANNEL = max_configs
+        self.MAX_RETRIES = min(10, max(1, 10))
+        self.CHANNEL_RETRY_LIMIT = min(10, max(1, 10))
+        self.REQUEST_TIMEOUT = min(120, max(30, 90))
+
+    def _set_specific_count_mode(self):
+        if self.specific_config_count <= 0:
+            self.specific_config_count = 50
+        
+        protocols_count = len(self.SUPPORTED_PROTOCOLS)
+        base_per_protocol = max(1, self.specific_config_count // protocols_count)
+        
+        for protocol in self.SUPPORTED_PROTOCOLS:
+            self.SUPPORTED_PROTOCOLS[protocol].update({
+                "min_configs": 1,
+                "max_configs": min(base_per_protocol * 2, 1000),
+                "flexible_max": True
+            })
+        
+        self.MIN_CONFIGS_PER_CHANNEL = 1
+        self.MAX_CONFIGS_PER_CHANNEL = min(max(5, self.specific_config_count // 2), 1000)
+
+    def _normalize_url(self, url: str) -> str:
+        try:
+            if not url:
+                raise ValueError("Empty URL")
+                
+            url = url.strip()
+            if url.startswith('ssconf://'):
+                url = url.replace('ssconf://', 'https://', 1)
+                
+            parsed = urlparse(url)
+            if not parsed.scheme or not parsed.netloc:
+                raise ValueError("Invalid URL format")
+                
+            path = parsed.path.rstrip('/')
+            
+            if parsed.netloc.startswith('t.me/s/'):
+                channel_name = parsed.path.strip('/').lower()
+                return f"telegram:{channel_name}"
+                
+            return f"{parsed.scheme}://{parsed.netloc}{path}"
+        except Exception as e:
+            logger.error(f"URL normalization error: {str(e)}")
+            raise
+
+    def _remove_duplicate_urls(self, channel_configs: List[ChannelConfig]) -> List[ChannelConfig]:
+        try:
+            seen_urls = {}
+            unique_configs = []
+            
+            for config in channel_configs:
+                if not isinstance(config, ChannelConfig):
+                    logger.warning(f"Invalid config skipped: {config}")
+                    continue
+                    
+                try:
+                    normalized_url = self._normalize_url(config.url)
+                    if normalized_url not in seen_urls:
+                        seen_urls[normalized_url] = True
+                        unique_configs.append(config)
+                except Exception:
+                    continue
+            
+            if not unique_configs:
+                self.save_empty_config_file()
+                logger.error("No valid sources found. Empty config file created.")
+                return []
+                
+            return unique_configs
+        except Exception as e:
+            logger.error(f"Error removing duplicate URLs: {str(e)}")
+            self.save_empty_config_file()
+            return []
+
+    def is_protocol_enabled(self, protocol: str) -> bool:
+        try:
+            if not protocol:
+                return False
+                
+            protocol = protocol.lower().strip()
+            
+            if protocol in self.SUPPORTED_PROTOCOLS:
+                return self.SUPPORTED_PROTOCOLS[protocol].get("enabled", False)
+                
+            for main_protocol, info in self.SUPPORTED_PROTOCOLS.items():
+                if protocol in info.get("aliases", []):
+                    return info.get("enabled", False)
+                    
+            return False
+        except Exception:
+            return False
+
+    def get_enabled_channels(self) -> List[ChannelConfig]:
+        channels = [channel for channel in self.SOURCE_URLS if channel.enabled]
+        if not channels:
+            self.save_empty_config_file()
+            logger.error("No enabled channels found. Empty config file created.")
+        return channels
+
+    def update_channel_stats(self, channel: ChannelConfig, success: bool, response_time: float = 0):
+        if success:
+            channel.metrics.success_count += 1
+            channel.metrics.last_success_time = datetime.now()
+        else:
+            channel.metrics.fail_count += 1
+        
+        if response_time > 0:
+            if channel.metrics.avg_response_time == 0:
+                channel.metrics.avg_response_time = response_time
+            else:
+                channel.metrics.avg_response_time = (channel.metrics.avg_response_time * 0.7) + (response_time * 0.3)
+        
+        channel.calculate_overall_score()
+        
+        if channel.metrics.overall_score < 25:
+            channel.enabled = False
+        
+        if not any(c.enabled for c in self.SOURCE_URLS):
+            self.save_empty_config_file()
+            logger.error("All channels are disabled. Empty config file created.")
+
+    def adjust_protocol_limits(self, channel: ChannelConfig):
+        if self.use_maximum_power:
+            return
+            
+        for protocol in channel.metrics.protocol_counts:
+            if protocol in self.SUPPORTED_PROTOCOLS:
+                current_count = channel.metrics.protocol_counts[protocol]
+                if current_count > 0:
+                    self.SUPPORTED_PROTOCOLS[protocol]["min_configs"] = min(
+                        self.SUPPORTED_PROTOCOLS[protocol]["min_configs"],
+                        current_count
+                    )
+
+    def save_empty_config_file(self) -> bool:
+        try:
+            with open(self.OUTPUT_FILE, 'w', encoding='utf-8') as f:
+                f.write("")
+            return True
+        except Exception:
+            return False
