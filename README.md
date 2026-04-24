@@ -18,7 +18,7 @@ Real-time performance statistics of all configured sources (Telegram channels an
 
 ### Detailed Analytics
 
-📊 [View Full Interactive Dashboard](https://htmlpreview.github.io/?https://github.com/YawStar/proxy-config-fetcher/blob/main/assets%2Fperformance_report.html)
+📊 [View Full Interactive Dashboard](https://htmlpreview.github.io/?https://github.com/YawStar/Proxy-Hunter/blob/main/assets%2Fperformance_report.html)
 
 > **Important for Forked Repositories**:  
 > If you fork this repository, replace `YawStar` in the dashboard link above with your GitHub username to access your own analytics dashboard.
