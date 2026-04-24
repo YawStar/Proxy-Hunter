@@ -30,9 +30,9 @@ ENABLED_PROTOCOLS = {
     "wireguard://": False,
     "hysteria2://": False,
     "vless://": True,
-    "vmess://": True,
-    "ss://": True,
-    "trojan://": True,
+    "vmess://": False,
+    "ss://": False,
+    "trojan://": False,
     "tuic://": False,
 }
 
