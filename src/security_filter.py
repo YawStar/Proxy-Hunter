@@ -16,7 +16,7 @@ class SecurityFilter:
         self.output_file = output_file
         self.xray_output_file = xray_output_file
         self.utility_tags = {'direct', 'block', 'dns'}
-        self.group_tags = {'👽 Best Ping 🚀', '🌐 YawStar Proxy Hunter'}
+        self.group_tags = {'👽 Best Ping 🚀', '🌐 Anonymous Multi'}
         
         self.SECURE_SS_METHODS = {
             'aes-128-gcm',
@@ -48,7 +48,7 @@ class SecurityFilter:
             "log": {
                 "loglevel": "warning"
             },
-            "remarks": "🌐 YawStar Proxy Hunter Balanced - Secure Configs",
+            "remarks": "👽 Anonymous Multi Balanced - Secure Configs",
             "dns": {
                 "servers": [
                     "https://dns.google/dns-query",
