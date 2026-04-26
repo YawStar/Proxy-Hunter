@@ -261,7 +261,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👤 About the Developer
 
-Developed with ❤️ by **YawStar**
+Developed with ❤️ by **YawHackka**
 
 - 🐙 GitHub: [@yawstar](https://github.com/YawStar)
 - ✈️ Telegram: [@yawhackka](https://t.me/yawhackka)
