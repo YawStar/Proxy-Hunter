@@ -20,7 +20,7 @@ echo -e "${WHITE} Designed by: ${BRIGHT_GREEN}👽 Anonymous${NC}"
 echo -e "${MAGENTA}═════════════════════════════════════════════${NC}"
 echo ""
 
-REPO_URL="https://github.com/4n0nymou3/multi-proxy-config-fetcher.git"
+REPO_URL="https://github.com/YawStar/Proxy-Hunter.git"
 INSTALL_DIR="$HOME/multi-proxy-config-fetcher"
 VENV_DIR="$INSTALL_DIR/venv"
 
