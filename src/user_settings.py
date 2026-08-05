@@ -3,8 +3,10 @@
 # List of source URLs to fetch proxy configurations from.
 # Add or remove URLs as needed. All URLs in this list are automatically enabled.
 SOURCE_URLS = [
-    "https://t.me/s/PrivateVPNs",
-    "https://t.me/s/DirectVPN",
+    #"https://t.me/s/PrivateVPNs",
+    #"https://t.me/s/DirectVPN",
+    "https://raw.githubusercontent.com/masir-sefid/Sub/main/@Masir_Sefid.txt",
+    "https://raw.githubusercontent.com/Mahdi0024/ProxyCollector/master/sub/proxies.txt",
     "https://t.me/s/persianvpnhub",
     "https://raw.githubusercontent.com/Mahdi0024/ProxyCollector/master/sub/proxies.txt",
     "https://raw.githubusercontent.com/zieng2/wl/refs/heads/main/vless_universal.txt",
