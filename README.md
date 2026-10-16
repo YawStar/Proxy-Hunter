@@ -1,8 +1,31 @@
+<div top=""></div>
 <div dir="ltr">
 
 # 🥷 YawStar Proxy Hunter
 
 An advanced, automated proxy configuration management system that fetches, validates, tests, enriches, and filters proxy configurations from multiple sources. This project provides enterprise-grade proxy management with real-time health monitoring, geographical tagging, and multi-stage security filtering.
+
+## 📑 Table of Contents
+
+- [📊 Source Performance Monitoring](#-source-performance-monitoring)
+  - [Quick Overview](#quick-overview)
+  - [Detailed Analytics](#-detailed-analytics)
+- [✨ Key Features](#-key-features)
+  - [Multi-Protocol Support](#multi-protocol-support)
+  - [Advanced Processing Pipeline](#advanced-processing-pipeline)
+- [⚙️ Configuration Options](#️-configuration-options)
+- [📁 Output Files](#-output-files)
+- [🔗 Direct Download Links](#-direct-download-links)
+- [🔄 Automation](#-automation)
+  - [GitHub Actions Workflow](#github-actions-workflow)
+- [🛡️ Security Features](#️-security-features)
+- [📈 Performance Optimization](#-performance-optimization)
+- [🌍 Geolocation System](#-geolocation-system)
+- [📊 Statistics and Monitoring](#-statistics-and-monitoring)
+- [⚠️ Disclaimer](#️-disclaimer)
+- [📜 License](#-scroll-license)
+- [👤 About the Developer](#-about-the-developer)
+- [🙏 Acknowledgments](#-acknowledgments)
 
 ## 📊 Source Performance Monitoring
 
@@ -155,6 +178,7 @@ Click on your preferred proxy type to get the latest list. These links always po
 |----------|----------|
 | proxy_configs.txt | <https://raw.githubusercontent.com/YawStar/Proxy-Hunter/refs/heads/main/configs/proxy_configs.txt> |
 | proxy_configs_tested.txt | <https://raw.githubusercontent.com/YawStar/Proxy-Hunter/refs/heads/main/configs/proxy_configs_tested.txt> |
+| proxy_configs_deduplicated.txt | <https://raw.githubusercontent.com/YawStar/Proxy-Hunter/refs/heads/main/configs/proxy_configs_deduplicated.txt> |
 | singbox_configs_all.json | <https://raw.githubusercontent.com/YawStar/Proxy-Hunter/refs/heads/main/configs/proxy_configs_tested.txt> |
 | singbox_configs_tested.json | <https://raw.githubusercontent.com/YawStar/Proxy-Hunter/refs/heads/main/configs/singbox_configs_tested.json> |
 | singbox_configs_secure.json | <https://raw.githubusercontent.com/YawStar/Proxy-Hunter/refs/heads/main/configs/singbox_configs_secure.json>|
@@ -296,7 +320,7 @@ Developed with ❤️ by **YawHackka**
 
 <div align="center">
 
-**[⬆ Back to Top](#-access-configurations)**
+**[⬆ Back to Top](#top)**
 
 Made with 💚 by YawHackka
 
